@@ -520,6 +520,7 @@ const state = {
   pendingMealType: 'snack',
   loading: false,
   error: null,
+  refining: false,
   limitDraft: 2000,
   weightDraft: 70,
   activityTab: 'steps',
@@ -1021,6 +1022,11 @@ function renderResultSheet() {
     h += '<span class="percent-val" id="portionPercentLabel">100%</span>';
     h += '</div>';
     h += '<div class="hint">Full photo = 100%. Only ate half that cookie? Drag to 50% and the calories below adjust.</div>';
+    h += '<label>Anything the photo can\'t show?</label>';
+    h += '<input type="text" id="detailsInput" placeholder="e.g. used Splenda instead of sugar">';
+    h += '<div class="sheet-row" style="margin-top:8px;">';
+    h += '<button class="btn btn-secondary" style="flex:1;" onclick="refineWithDetails()"' + (state.refining ? ' disabled' : '') + '>' + (state.refining ? 'Updating\u2026' : 'Update estimate') + '</button>';
+    h += '</div>';
     h += '<label>Food name</label>';
     h += '<input type="text" id="editNameInput" value="' + escapeHtml(r.food_name) + '">';
     h += '<label>Meal</label>';
@@ -1275,6 +1281,18 @@ function fileToDataUrl(file) {
   });
 }
 
+async function refineWithDetails() {
+  const input = document.getElementById('detailsInput');
+  const note = input ? input.value.trim() : '';
+  if (!note) return;
+  state.refining = true;
+  state.error = null;
+  render();
+  await analyzeImage(state.pendingImage, note);
+  state.refining = false;
+  render();
+}
+
 function retryAnalysis() {
   state.error = null;
   state.view = 'analyzing';
@@ -1282,13 +1300,18 @@ function retryAnalysis() {
   analyzeImage(state.pendingImage);
 }
 
-async function analyzeImage(dataUrl) {
+function getFoodSystemPrompt() {
+  return "You are a nutrition estimator specialized in Filipino and wider Asian cuisine (Filipino, Chinese, Japanese, Korean, Thai, Vietnamese, Indonesian, Malaysian, Indian). Most photos you'll see are home-cooked or carinderia/hawker-style meals from these cuisines, so identify the specific dish by name rather than a generic description whenever you can \u2014 e.g. say 'chicken adobo' not 'braised meat', 'sinigang na baboy' not 'sour soup', 'pancit canton' not 'stir-fried noodles'.\n\nUse any visible container (rice bowl, plate, kanin cup, glass, mug, palayok/clay pot) as a scale reference for real-world portion size, factoring in depth and fill-level, not just top-down area. Keep these regional conventions in mind:\n- A standard Filipino rice cup/scoop of cooked rice is roughly 150-200g (about 190-260 kcal); many meals are served with 1-2 cups of rice on the side even if the rice is on a separate plate from the ulam (viand) \u2014 account for it if visible.\n- Filipino and Southeast Asian home cooking is often oil-, coconut milk-, or sugar-rich (adobo, kare-kare, bicol express, laing, lechon kawali, crispy pata, halo-halo, turon) \u2014 don't lowball calorie density just because a dish looks like 'just vegetables' or 'just soup'; sauces and frying matter a lot.\n- Common high-calorie-density items to calibrate against: lechon/lechon kawali and crispy pata (very high, deep-fried pork), sisig (fatty, oily), kare-kare (peanut sauce, rich), halo-halo and taho (added sugar/syrup), pancit and lumpia (oil-fried or oil-tossed).\n- Lighter/lower-density reference points: sinigang and tinola broths (mostly water-based, lower calorie unless very meat-heavy), fresh lumpia (unfried), steamed fish, most vegetable-forward ulam.\n- For other Asian cuisine, calibrate similarly: ramen and pho broths are moderate, curries and fried rice are dense, sushi/sashimi is lighter per piece but rice adds up, dumplings and fried items are dense.\n- If multiple dishes/components are visible on one plate (e.g. rice + ulam + a side), estimate each component's contribution and sum them into one total, and mention the components in the portion description.\n- The user may provide additional details the photo can't show, such as ingredient substitutions (e.g. Splenda or another sugar substitute instead of regular sugar, a lower-fat version of an ingredient, a different cooking method). When given, treat this as ground truth and adjust the estimate accordingly \u2014 e.g. a sugar substitute with negligible calories should meaningfully lower the total versus a regular-sugar assumption.\n\nRespond with ONLY a raw JSON object, no markdown fences, no commentary, in exactly this shape: {\"food_name\": string (use the specific local/regional dish name when recognizable), \"portion_description\": string describing the estimated size/volume, container, and any components summed together, \"estimated_calories\": integer, \"confidence\": \"high\" | \"medium\" | \"low\"}. If the image does not clearly show food or drink, set food_name to \"Not recognized\" and estimated_calories to 0.";
+}
+
+async function analyzeImage(dataUrl, note) {
   try {
     const commaIdx = dataUrl.indexOf(',');
     const meta = dataUrl.substring(5, commaIdx).split(';')[0];
     const base64 = dataUrl.substring(commaIdx + 1);
 
-    const systemPrompt = "You are a nutrition estimator specialized in Filipino and wider Asian cuisine (Filipino, Chinese, Japanese, Korean, Thai, Vietnamese, Indonesian, Malaysian, Indian). Most photos you'll see are home-cooked or carinderia/hawker-style meals from these cuisines, so identify the specific dish by name rather than a generic description whenever you can \u2014 e.g. say 'chicken adobo' not 'braised meat', 'sinigang na baboy' not 'sour soup', 'pancit canton' not 'stir-fried noodles'.\n\nUse any visible container (rice bowl, plate, kanin cup, glass, mug, palayok/clay pot) as a scale reference for real-world portion size, factoring in depth and fill-level, not just top-down area. Keep these regional conventions in mind:\n- A standard Filipino rice cup/scoop of cooked rice is roughly 150-200g (about 190-260 kcal); many meals are served with 1-2 cups of rice on the side even if the rice is on a separate plate from the ulam (viand) \u2014 account for it if visible.\n- Filipino and Southeast Asian home cooking is often oil-, coconut milk-, or sugar-rich (adobo, kare-kare, bicol express, laing, lechon kawali, crispy pata, halo-halo, turon) \u2014 don't lowball calorie density just because a dish looks like 'just vegetables' or 'just soup'; sauces and frying matter a lot.\n- Common high-calorie-density items to calibrate against: lechon/lechon kawali and crispy pata (very high, deep-fried pork), sisig (fatty, oily), kare-kare (peanut sauce, rich), halo-halo and taho (added sugar/syrup), pancit and lumpia (oil-fried or oil-tossed).\n- Lighter/lower-density reference points: sinigang and tinola broths (mostly water-based, lower calorie unless very meat-heavy), fresh lumpia (unfried), steamed fish, most vegetable-forward ulam.\n- For other Asian cuisine, calibrate similarly: ramen and pho broths are moderate, curries and fried rice are dense, sushi/sashimi is lighter per piece but rice adds up, dumplings and fried items are dense.\n- If multiple dishes/components are visible on one plate (e.g. rice + ulam + a side), estimate each component's contribution and sum them into one total, and mention the components in the portion description.\n\nRespond with ONLY a raw JSON object, no markdown fences, no commentary, in exactly this shape: {\"food_name\": string (use the specific local/regional dish name when recognizable), \"portion_description\": string describing the estimated size/volume, container, and any components summed together, \"estimated_calories\": integer, \"confidence\": \"high\" | \"medium\" | \"low\"}. If the image does not clearly show food or drink, set food_name to \"Not recognized\" and estimated_calories to 0.";
+    const systemPrompt = getFoodSystemPrompt();
+    const userText = "Analyze this plate/glass and estimate the calories." + (note ? " Additional detail from the user \u2014 treat this as ground truth: " + note : "");
 
     const response = await fetch(API_BASE + "/api/claude", {
       method: "POST",
@@ -1302,7 +1325,7 @@ async function analyzeImage(dataUrl) {
             role: "user",
             content: [
               { type: "image", source: { type: "base64", media_type: meta, data: base64 } },
-              { type: "text", text: "Analyze this plate/glass and estimate the calories." }
+              { type: "text", text: userText }
             ]
           }
         ]
@@ -1381,6 +1404,7 @@ window.triggerCamera = triggerCamera;
 window.retryAnalysis = retryAnalysis;
 window.confirmAddEntry = confirmAddEntry;
 window.updatePortionPreview = updatePortionPreview;
+window.refineWithDetails = refineWithDetails;
 window.openActivity = openActivity;
 window.setActivityTab = setActivityTab;
 window.clearSteps = clearSteps;
