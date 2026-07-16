@@ -403,6 +403,22 @@
     color: #D8A857;
     margin-top: 2px;
   }
+  .percent-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .percent-row input[type=range] {
+    flex: 1;
+    accent-color: #D8A857;
+  }
+  .percent-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #D8A857;
+    min-width: 44px;
+    text-align: right;
+  }
   .err {
     background: #2A1E17;
     border: 1px solid #4A3320;
@@ -618,9 +634,9 @@ async function createProfile() {
   if (!name) return;
   const slug = slugify(name);
   if (!slug) return;
-  if (state.profilesList.some(p => p.slug === slug)) {
-    state.profileError = 'That name is taken already \u2014 try adding an initial, e.g. "Marielle B".';
-    render();
+  const existing = state.profilesList.find(p => p.slug === slug);
+  if (existing) {
+    await selectProfile(existing.slug);
     return;
   }
   state.profilesList.push({ slug, name });
@@ -955,10 +971,10 @@ function renderProfilePicker() {
   if (state.profileError) {
     h += '<div class="err">' + escapeHtml(state.profileError) + '</div>';
   }
-  h += '<label>Add your name</label>';
+  h += '<label>Your name</label>';
   h += '<input type="text" id="newProfileInput" placeholder="e.g. Marielle">';
   h += '<div class="sheet-row" style="margin-top:16px;"><button class="btn btn-primary" onclick="createProfile()">Continue</button></div>';
-  h += '<div class="hint" style="margin-top:24px;">This is a simple name picker for friends sharing the app \u2014 not a secure login. Anyone can select any name from the list, so keep it to people you trust.</div>';
+  h += '<div class="hint" style="margin-top:24px;">Type your name to continue \u2014 if you\'ve used the app before, the same name brings back all your history. This is a simple name picker for friends sharing the app, not a secure login, so anyone could type someone else\'s name and see their log. Keep it to people you trust.</div>';
   h += '</div>';
   return h;
 }
@@ -997,8 +1013,14 @@ function renderResultSheet() {
   } else if (r) {
     h += '<div class="analyzed-preview">';
     h += '<img src="' + state.pendingImage + '">';
-    h += '<div><div class="analyzed-portion">' + escapeHtml(r.portion_description) + '</div><div class="analyzed-cals">' + r.estimated_calories + ' kcal</div></div>';
+    h += '<div><div class="analyzed-portion">' + escapeHtml(r.portion_description) + '</div><div class="analyzed-cals" id="analyzedCalsDisplay">' + r.estimated_calories + ' kcal</div></div>';
     h += '</div>';
+    h += '<label>How much did you actually eat?</label>';
+    h += '<div class="percent-row">';
+    h += '<input type="range" id="portionPercentSlider" min="0" max="100" step="5" value="100" oninput="updatePortionPreview(this.value)">';
+    h += '<span class="percent-val" id="portionPercentLabel">100%</span>';
+    h += '</div>';
+    h += '<div class="hint">Full photo = 100%. Only ate half that cookie? Drag to 50% and the calories below adjust.</div>';
     h += '<label>Food name</label>';
     h += '<input type="text" id="editNameInput" value="' + escapeHtml(r.food_name) + '">';
     h += '<label>Meal</label>';
@@ -1315,17 +1337,33 @@ async function analyzeImage(dataUrl) {
   }
 }
 
+function updatePortionPreview(percent) {
+  const label = document.getElementById('portionPercentLabel');
+  const display = document.getElementById('analyzedCalsDisplay');
+  if (label) label.textContent = percent + '%';
+  if (display && state.pendingResult) {
+    const adjusted = Math.round(state.pendingResult.estimated_calories * (percent / 100));
+    display.textContent = adjusted + ' kcal';
+  }
+}
+
 function confirmAddEntry() {
   const r = state.pendingResult;
   const nameInput = document.getElementById('editNameInput');
   const mealInput = document.getElementById('mealTypeInput');
+  const percentInput = document.getElementById('portionPercentSlider');
   const finalName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : r.food_name;
   const mealType = mealInput ? mealInput.value : defaultMealType();
+  const percent = percentInput ? parseInt(percentInput.value, 10) : 100;
+  const finalCalories = Math.round(r.estimated_calories * (percent / 100));
+  const portionNote = percent !== 100
+    ? r.portion_description + ' \u2014 ' + percent + '% eaten'
+    : r.portion_description;
   state.entries.push({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: finalName,
-    portion: r.portion_description,
-    calories: r.estimated_calories,
+    portion: portionNote,
+    calories: finalCalories,
     mealType: mealType,
     thumb: state.pendingImage,
     time: Date.now()
@@ -1342,6 +1380,7 @@ window.deleteEntry = deleteEntry;
 window.triggerCamera = triggerCamera;
 window.retryAnalysis = retryAnalysis;
 window.confirmAddEntry = confirmAddEntry;
+window.updatePortionPreview = updatePortionPreview;
 window.openActivity = openActivity;
 window.setActivityTab = setActivityTab;
 window.clearSteps = clearSteps;
