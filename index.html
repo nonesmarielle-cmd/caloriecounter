@@ -564,7 +564,8 @@ const state = {
   dayEntries: [],
   dayActivities: [],
   daySteps: 0,
-  dayLoading: false
+  dayLoading: false,
+  pendingWorkout: null
 };
 
 const MET_TABLE = {
@@ -873,6 +874,8 @@ function render() {
     html += renderDescribeSheet();
   } else if (state.view === 'dayDetail') {
     html += renderDayDetailSheet();
+  } else if (state.view === 'workoutResult') {
+    html += renderWorkoutResultSheet();
   }
 
   document.getElementById('app').innerHTML = html;
@@ -1326,9 +1329,9 @@ function deleteActivity(id) {
   render();
 }
 
-async function analyzeYoutubeWorkout() {
-  const url = document.getElementById('ytUrlInput').value.trim();
-  const minutesOverride = document.getElementById('ytMinutesInput').value.trim();
+async function analyzeYoutubeWorkout(urlArg, minutesArg, note) {
+  const url = urlArg !== undefined ? urlArg : document.getElementById('ytUrlInput').value.trim();
+  const minutesOverride = minutesArg !== undefined ? minutesArg : document.getElementById('ytMinutesInput').value.trim();
   if (!url) return;
   state.ytUrlDraft = url;
   state.ytMinutesDraft = minutesOverride;
@@ -1350,16 +1353,18 @@ async function analyzeYoutubeWorkout() {
     const videoDurationMinutes = info.lengthSeconds ? Math.round(info.lengthSeconds / 60) : null;
     const knownDuration = minutesOverride ? parseInt(minutesOverride, 10) : videoDurationMinutes;
 
-    const systemPrompt = "You identify workout videos from YouTube metadata (title, channel name, and description text) and estimate calories burned. Determine the type of workout (e.g. running, HIIT, cycling, dance cardio, yoga, strength training, boxing, pilates) and its likely intensity from the metadata. Pick the closest standard MET (metabolic equivalent) value for that intensity. If the user's message specifies an exact duration to use, use that exact number for estimated_duration_minutes and for the calorie calculation \u2014 do not re-estimate it. Otherwise, estimate a typical duration for this kind of workout video from the metadata. Calculate estimated calories burned as MET * body_weight_kg * (duration_minutes / 60), rounded to the nearest whole number. Respond with ONLY a raw JSON object as your final output, no markdown fences, no commentary, in exactly this shape: {\"workout_name\": string, \"estimated_duration_minutes\": integer, \"met_value\": number, \"estimated_calories_burned\": integer}. If the metadata doesn't look like a workout video at all, set workout_name to \"Not found\" and estimated_calories_burned to 0.";
+    const systemPrompt = "You identify workout videos from YouTube metadata (title, channel name, and description text) and estimate calories burned. Determine the type of workout (e.g. running, HIIT, cycling, dance cardio, yoga, strength training, boxing, pilates) and its likely intensity from the metadata. Pick the closest standard MET (metabolic equivalent) value for that intensity. If the user's message specifies an exact duration to use, use that exact number for estimated_duration_minutes and for the calorie calculation \u2014 do not re-estimate it. Otherwise, estimate a typical duration for this kind of workout video from the metadata. If the user provides an additional detail (e.g. it was a harder/easier variation, specific weights used, an interrupted session), treat that as ground truth and adjust the estimate accordingly. Calculate estimated calories burned as MET * body_weight_kg * (duration_minutes / 60), rounded to the nearest whole number. Also write a short one-sentence rationale explaining the estimate in plain language, e.g. \"20 min of moderate weight lifting (MET 5.0) at 70 kg \u2248 117 kcal.\" Respond with ONLY a raw JSON object as your final output, no markdown fences, no commentary, in exactly this shape: {\"workout_name\": string, \"estimated_duration_minutes\": integer, \"met_value\": number, \"estimated_calories_burned\": integer, \"rationale\": string}. If the metadata doesn't look like a workout video at all, set workout_name to \"Not found\" and estimated_calories_burned to 0.";
 
     const durationInstruction = knownDuration
       ? ("Use exactly " + knownDuration + " minutes as the duration performed.")
       : "No exact duration is known \u2014 estimate a typical duration for this kind of workout video from the metadata.";
 
+    const noteText = note ? ("\nAdditional detail from the user \u2014 treat this as ground truth: " + note) : "";
+
     const userText = "Video title: " + (info.title || "unknown") +
       "\nChannel: " + (info.author || "unknown") +
       "\nDescription: " + (info.description ? info.description.slice(0, 1500) : "none available") +
-      "\nUser's body weight: " + state.weight + " kg\n" + durationInstruction;
+      "\nUser's body weight: " + state.weight + " kg\n" + durationInstruction + noteText;
 
     const response = await fetch(API_BASE + "/api/claude", {
       method: "POST",
@@ -1393,23 +1398,79 @@ async function analyzeYoutubeWorkout() {
       ? (minutesOverride + ' min (of a ' + (videoDurationMinutes || parsed.estimated_duration_minutes) + ' min video)')
       : (videoDurationMinutes ? (finalMinutes + ' min video') : (finalMinutes + ' min, estimated'));
 
-    state.activities.push({
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    state.pendingWorkout = {
       name: parsed.workout_name,
       detail: durationLabel + ' \u00b7 YouTube',
-      calories: parsed.estimated_calories_burned
-    });
-    saveActivity();
+      calories: parsed.estimated_calories_burned,
+      metValue: parsed.met_value,
+      minutes: finalMinutes,
+      rationale: parsed.rationale || (parsed.met_value + ' MET \u00d7 ' + state.weight + ' kg \u00d7 (' + finalMinutes + '/60) hr \u2248 ' + parsed.estimated_calories_burned + ' kcal')
+    };
     state.activityLoading = false;
-    state.ytUrlDraft = '';
-    state.ytMinutesDraft = '';
-    closeSheet();
+    state.view = 'workoutResult';
+    render();
   } catch (err) {
     console.error(err);
     state.activityLoading = false;
     state.activityError = "Something went wrong looking up that video. Check the link and your connection, then try again.";
     render();
   }
+}
+
+function renderWorkoutResultSheet() {
+  const w = state.pendingWorkout;
+  let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
+  h += '<div class="sheet">';
+  if (!w) {
+    h += '<div class="err">Something went wrong showing that estimate.</div>';
+    h += '<div class="sheet-row"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Close</button></div>';
+    h += '</div></div>';
+    return h;
+  }
+  h += '<div class="analyzed-preview">';
+  h += '<div class="activity-icon" style="width:64px;height:64px;">' + icon('flame') + '</div>';
+  h += '<div><div class="analyzed-name" style="font-size:15px;font-weight:600;">' + escapeHtml(w.name) + '</div><div class="analyzed-portion">' + escapeHtml(w.detail) + '</div><div class="analyzed-cals" style="color:#7FB88A;">+' + w.calories + ' kcal</div></div>';
+  h += '</div>';
+  h += '<div class="hint" style="background:#1C1B17;border:1px solid #33322A;border-radius:10px;padding:12px 14px;margin-bottom:14px;">' + escapeHtml(w.rationale) + '</div>';
+  if (state.activityLoading) {
+    h += '<div class="loading-wrap" style="padding:20px 0;"><div class="spinner"></div><div>Updating estimate\u2026</div></div>';
+    h += '</div></div>';
+    return h;
+  }
+  h += '<label>Anything the video info can\'t show?</label>';
+  h += '<input type="text" id="workoutDetailsInput" placeholder="e.g. I used heavier weights than shown">';
+  h += '<div class="sheet-row" style="margin-top:8px;">';
+  h += '<button class="btn btn-secondary" style="flex:1;" onclick="refineWorkoutWithDetails()">Update estimate</button>';
+  h += '</div>';
+  h += '<div class="sheet-row" style="margin-top:16px;">';
+  h += '<button class="btn btn-secondary" onclick="closeSheet()">Discard</button>';
+  h += '<button class="btn btn-primary" onclick="confirmAddWorkout()">Add to log</button>';
+  h += '</div>';
+  h += '</div></div>';
+  return h;
+}
+
+async function refineWorkoutWithDetails() {
+  const input = document.getElementById('workoutDetailsInput');
+  const note = input ? input.value.trim() : '';
+  if (!note) return;
+  await analyzeYoutubeWorkout(state.ytUrlDraft, state.ytMinutesDraft, note);
+}
+
+function confirmAddWorkout() {
+  const w = state.pendingWorkout;
+  if (!w) return;
+  state.activities.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: w.name,
+    detail: w.detail,
+    calories: w.calories
+  });
+  saveActivity();
+  state.pendingWorkout = null;
+  state.ytUrlDraft = '';
+  state.ytMinutesDraft = '';
+  closeSheet();
 }
 
 function openSettings() {
@@ -1424,6 +1485,7 @@ function closeSheet() {
   state.error = null;
   state.pendingResult = null;
   state.pendingImage = null;
+  state.pendingWorkout = null;
   state.activityError = null;
   state.activityLoading = false;
   render();
@@ -1726,6 +1788,8 @@ window.confirmSteps = confirmSteps;
 window.confirmManualWorkout = confirmManualWorkout;
 window.deleteActivity = deleteActivity;
 window.analyzeYoutubeWorkout = analyzeYoutubeWorkout;
+window.confirmAddWorkout = confirmAddWorkout;
+window.refineWorkoutWithDetails = refineWorkoutWithDetails;
 window.switchPage = switchPage;
 window.prevMonth = prevMonth;
 window.nextMonth = nextMonth;
