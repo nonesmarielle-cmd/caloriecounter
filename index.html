@@ -889,16 +889,22 @@ function renderCalendarPage() {
     if (dateStr === todayStr) cls += ' today-cell';
     if (d) {
       const net = d.consumed - d.burned;
-      calText = net.toLocaleString();
-      cls += (net > state.limit ? ' over' : ' under');
+      const remaining = state.limit - net;
+      if (remaining >= 0) {
+        calText = remaining.toLocaleString();
+        cls += ' under';
+      } else {
+        calText = Math.abs(remaining).toLocaleString();
+        cls += ' over';
+      }
     }
     h += '<div class="' + cls + '"><div class="d-num">' + day + '</div><div class="d-cal">' + calText + '</div></div>';
   }
   h += '</div>';
 
   h += '<div class="cal-legend">';
-  h += '<span><span class="cal-dot" style="background:#7FB88A"></span>within budget</span>';
-  h += '<span><span class="cal-dot" style="background:#D8756A"></span>over budget</span>';
+  h += '<span><span class="cal-dot" style="background:#7FB88A"></span>kcal left</span>';
+  h += '<span><span class="cal-dot" style="background:#D8756A"></span>kcal over</span>';
   h += '</div>';
 
   return h;
