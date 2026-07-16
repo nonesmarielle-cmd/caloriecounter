@@ -77,7 +77,7 @@
   .gauge-sub {
     display: flex;
     gap: 18px;
-    margin-top: 14px;
+    margin-bottom: 14px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
   }
@@ -271,7 +271,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 20px 16px;
+    padding: 0 16px 16px;
   }
   .cal-month {
     font-size: 14px;
@@ -288,9 +288,9 @@
   .cal-nav-btn svg { width: 18px; height: 18px; }
   .cal-grid {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 6px;
-    padding: 0 20px 24px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 5px;
+    padding: 0 16px 24px;
   }
   .cal-dow {
     font-size: 10px;
@@ -302,6 +302,7 @@
   }
   .cal-day {
     aspect-ratio: 1;
+    min-width: 0;
     border-radius: 8px;
     background: #1C1B17;
     border: 1px solid #26251F;
@@ -309,12 +310,25 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 1px;
+    padding: 2px;
+    overflow: hidden;
+    cursor: pointer;
     font-family: 'JetBrains Mono', monospace;
   }
-  .cal-day.empty { background: transparent; border-color: transparent; }
-  .cal-day .d-num { font-size: 10px; color: #66655C; }
-  .cal-day .d-cal { font-size: 11px; font-weight: 500; color: #8C897C; }
+  .cal-day:active { transform: scale(0.94); }
+  .cal-day.empty { background: transparent; border-color: transparent; cursor: default; }
+  .cal-day.empty:active { transform: none; }
+  .cal-day .d-num { font-size: 9px; color: #66655C; }
+  .cal-day .d-cal {
+    font-size: 10px;
+    font-weight: 500;
+    color: #8C897C;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .cal-day.under { border-color: #2E4A33; background: #182018; }
   .cal-day.under .d-cal { color: #7FB88A; }
   .cal-day.over { border-color: #4A3320; background: #241A15; }
@@ -323,7 +337,7 @@
   .cal-legend {
     display: flex;
     gap: 16px;
-    padding: 0 20px 20px;
+    padding: 0 16px 20px;
     font-size: 11px;
     color: #66655C;
   }
@@ -545,7 +559,12 @@ const state = {
   profile: null,
   profilesList: [],
   profileError: null,
-  booting: true
+  booting: true,
+  selectedDate: null,
+  dayEntries: [],
+  dayActivities: [],
+  daySteps: 0,
+  dayLoading: false
 };
 
 const MET_TABLE = {
@@ -771,6 +790,13 @@ function render() {
   } else {
 
   html += '<div class="gauge-wrap">';
+  html += '<div class="gauge-sub">';
+  html += '<span><span class="stat-label">eaten</span><span class="stat-val">' + consumed.toLocaleString() + '</span></span>';
+  html += '<span><span class="stat-label">budget</span><span class="stat-val">' + state.limit.toLocaleString() + '</span></span>';
+  if (burned > 0) {
+    html += '<span><span class="stat-label">burned</span><span class="stat-val" style="color:#7FB88A">+' + burned.toLocaleString() + '</span></span>';
+  }
+  html += '</div>';
   html += '<svg width="170" height="170" viewBox="0 0 170 170">';
   html += '<circle cx="85" cy="85" r="70" fill="none" stroke="#26251F" stroke-width="12"/>';
   html += '<circle cx="85" cy="85" r="70" fill="none" stroke="' + ringColor + '" stroke-width="12" stroke-linecap="round" stroke-dasharray="' + circumference + '" stroke-dashoffset="' + dashOffset + '" transform="rotate(-90 85 85)" style="transition: stroke-dashoffset 0.4s ease"/>';
@@ -778,13 +804,6 @@ function render() {
   html += '<div class="gauge-center" style="margin-top:-118px">';
   html += '<div class="gauge-remaining" style="text-align:center">' + Math.abs(remaining).toLocaleString() + '</div>';
   html += '<div class="gauge-label" style="text-align:center">' + (remaining < 0 ? 'over budget' : 'kcal left') + '</div>';
-  html += '</div>';
-  html += '<div class="gauge-sub">';
-  html += '<span><span class="stat-label">eaten</span><span class="stat-val">' + consumed.toLocaleString() + '</span></span>';
-  html += '<span><span class="stat-label">budget</span><span class="stat-val">' + state.limit.toLocaleString() + '</span></span>';
-  if (burned > 0) {
-    html += '<span><span class="stat-label">burned</span><span class="stat-val" style="color:#7FB88A">+' + burned.toLocaleString() + '</span></span>';
-  }
   html += '</div>';
   html += '</div>';
 
@@ -852,6 +871,8 @@ function render() {
     html += renderActivitySheet();
   } else if (state.view === 'describe') {
     html += renderDescribeSheet();
+  } else if (state.view === 'dayDetail') {
+    html += renderDayDetailSheet();
   }
 
   document.getElementById('app').innerHTML = html;
@@ -898,7 +919,7 @@ function renderCalendarPage() {
         cls += ' over';
       }
     }
-    h += '<div class="' + cls + '"><div class="d-num">' + day + '</div><div class="d-cal">' + calText + '</div></div>';
+    h += '<div class="' + cls + '" onclick="openDayDetail(\'' + dateStr + '\')"><div class="d-num">' + day + '</div><div class="d-cal">' + calText + '</div></div>';
   }
   h += '</div>';
 
@@ -967,6 +988,143 @@ function prevMonth() {
 function nextMonth() {
   state.calendarMonth = new Date(state.calendarMonth.getFullYear(), state.calendarMonth.getMonth() + 1, 1);
   loadCalendarMonth();
+}
+
+async function openDayDetail(dateStr) {
+  state.selectedDate = dateStr;
+  state.dayLoading = true;
+  state.view = 'dayDetail';
+  render();
+  try {
+    const l = await kvGet('log:' + state.profile + ':' + dateStr);
+    state.dayEntries = (l && l.value) ? JSON.parse(l.value) : [];
+  } catch(e) { state.dayEntries = []; }
+  try {
+    const a = await kvGet('activity:' + state.profile + ':' + dateStr);
+    if (a && a.value) {
+      const parsed = JSON.parse(a.value);
+      state.dayActivities = parsed.activities || [];
+      state.daySteps = parsed.steps || 0;
+    } else {
+      state.dayActivities = [];
+      state.daySteps = 0;
+    }
+  } catch(e) { state.dayActivities = []; state.daySteps = 0; }
+  state.dayLoading = false;
+  render();
+}
+
+function renderDayDetailSheet() {
+  let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
+  h += '<div class="sheet">';
+  const dateObj = new Date(state.selectedDate + 'T00:00:00');
+  const label = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  h += '<div class="sheet-title">' + label + '</div>';
+
+  if (state.dayLoading) {
+    h += '<div class="loading-wrap" style="padding:30px 0;"><div class="spinner"></div><div>Loading\u2026</div></div>';
+    h += '</div></div>';
+    return h;
+  }
+
+  const stepCals = caloriesFromSteps(state.daySteps, state.weight);
+  const burned = stepCals + state.dayActivities.reduce((s, a) => s + a.calories, 0);
+  const consumed = state.dayEntries.reduce((s, e) => s + e.calories, 0);
+  const net = consumed - burned;
+
+  h += '<div class="hint" style="margin-bottom:14px;">Eaten ' + consumed.toLocaleString() + ' kcal' + (burned > 0 ? ' \u2014 burned ' + burned.toLocaleString() + ' kcal' : '') + ' \u2014 net ' + net.toLocaleString() + ' kcal</div>';
+
+  if (state.dayEntries.length === 0 && state.dayActivities.length === 0 && state.daySteps === 0) {
+    h += '<div class="empty" style="padding:20px 0;">Nothing logged this day.</div>';
+  } else {
+    if (state.dayEntries.length > 0) {
+      h += '<div class="section-label" style="padding:0;">Food</div>';
+      h += '<div class="log" style="margin-bottom:10px;">';
+      state.dayEntries.forEach(e => {
+        h += '<div class="entry">';
+        h += e.thumb ? ('<img src="' + e.thumb + '">') : ('<div class="activity-icon">' + icon('edit') + '</div>');
+        h += '<div class="entry-info"><div class="entry-name">' + escapeHtml(e.name) + '</div><div class="entry-portion">' + escapeHtml(e.portion) + '</div></div>';
+        h += '<div class="entry-cals">' + e.calories + '</div>';
+        h += '<button class="entry-del" onclick="deleteDayEntry(\'' + e.id + '\')">' + icon('trash') + '</button>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+    if (state.daySteps > 0 || state.dayActivities.length > 0) {
+      h += '<div class="section-label" style="padding:0;">Activity</div>';
+      h += '<div class="log">';
+      if (state.daySteps > 0) {
+        h += '<div class="entry">';
+        h += '<div class="activity-icon">' + icon('footprints') + '</div>';
+        h += '<div class="entry-info"><div class="entry-name">' + state.daySteps.toLocaleString() + ' steps</div><div class="entry-portion">walking, estimated</div></div>';
+        h += '<div class="entry-cals burn">+' + stepCals + '</div>';
+        h += '<button class="entry-del" onclick="clearDaySteps()">' + icon('trash') + '</button>';
+        h += '</div>';
+      }
+      state.dayActivities.forEach(a => {
+        h += '<div class="entry">';
+        h += '<div class="activity-icon">' + icon('flame') + '</div>';
+        h += '<div class="entry-info"><div class="entry-name">' + escapeHtml(a.name) + '</div><div class="entry-portion">' + escapeHtml(a.detail) + '</div></div>';
+        h += '<div class="entry-cals burn">+' + a.calories + '</div>';
+        h += '<button class="entry-del" onclick="deleteDayActivity(\'' + a.id + '\')">' + icon('trash') + '</button>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+  }
+
+  h += '<div class="sheet-row" style="margin-top:16px;"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Close</button></div>';
+  h += '</div></div>';
+  return h;
+}
+
+async function saveDayEntries() {
+  try { await kvSet('log:' + state.profile + ':' + state.selectedDate, JSON.stringify(state.dayEntries)); }
+  catch(e) { console.error('save day entries failed', e); }
+}
+
+async function saveDayActivity() {
+  try { await kvSet('activity:' + state.profile + ':' + state.selectedDate, JSON.stringify({ activities: state.dayActivities, steps: state.daySteps })); }
+  catch(e) { console.error('save day activity failed', e); }
+}
+
+function updateCalendarDataForSelectedDate() {
+  const stepCals = caloriesFromSteps(state.daySteps, state.weight);
+  const burned = stepCals + state.dayActivities.reduce((s, a) => s + a.calories, 0);
+  const consumed = state.dayEntries.reduce((s, e) => s + e.calories, 0);
+  state.calendarData[state.selectedDate] = { consumed, burned };
+}
+
+function syncTodayStateIfSelectedIsToday() {
+  if (state.selectedDate === todayDateStr()) {
+    state.entries = state.dayEntries;
+    state.activities = state.dayActivities;
+    state.steps = state.daySteps;
+  }
+}
+
+function deleteDayEntry(id) {
+  state.dayEntries = state.dayEntries.filter(e => e.id !== id);
+  saveDayEntries();
+  updateCalendarDataForSelectedDate();
+  syncTodayStateIfSelectedIsToday();
+  render();
+}
+
+function deleteDayActivity(id) {
+  state.dayActivities = state.dayActivities.filter(a => a.id !== id);
+  saveDayActivity();
+  updateCalendarDataForSelectedDate();
+  syncTodayStateIfSelectedIsToday();
+  render();
+}
+
+function clearDaySteps() {
+  state.daySteps = 0;
+  saveDayActivity();
+  updateCalendarDataForSelectedDate();
+  syncTodayStateIfSelectedIsToday();
+  render();
 }
 
 function escapeHtml(s) {
@@ -1523,6 +1681,10 @@ window.createProfile = createProfile;
 window.switchProfile = switchProfile;
 window.openDescribe = openDescribe;
 window.submitDescription = submitDescription;
+window.openDayDetail = openDayDetail;
+window.deleteDayEntry = deleteDayEntry;
+window.deleteDayActivity = deleteDayActivity;
+window.clearDaySteps = clearDaySteps;
 
 boot();
 </script>
