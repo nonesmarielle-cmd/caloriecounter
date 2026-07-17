@@ -354,11 +354,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .cal-day.under { border-color: #2E4A33; background: #182018; }
-  .cal-day.under .d-num { color: #EFEDE4; }
   .cal-day.under .d-cal { color: #7FB88A; }
-  .cal-day.over { border-color: #4A3320; background: #241A15; }
-  .cal-day.over .d-num { color: #EFEDE4; }
   .cal-day.over .d-cal { color: #D9342B; }
   .cal-day.today-cell { border-color: #D8A857; border-width: 1.5px; }
   .cal-legend {
@@ -961,7 +957,7 @@ function renderCalendarPage() {
   h += '</div>';
 
   if (state.calendarLoading) {
-    h += '<div class="loading-wrap"><div class="spinner"></div><div>Loading month\u2026</div></div>';
+    h += '<div class="loading-wrap" style="color:#131311;"><div class="spinner"></div><div>Loading month\u2026</div></div>';
     return h;
   }
 
