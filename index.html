@@ -346,15 +346,18 @@
   .cal-day.empty:active { transform: none; }
   .cal-day .d-num { font-family: 'PP Mori Black', -apple-system, sans-serif; font-size: 11px; color: #131311; }
   .cal-day .d-cal {
+    font-family: 'PP Mori Black', -apple-system, sans-serif;
     font-size: 10px;
-    font-weight: 500;
+    font-weight: 900;
     color: #131311;
     max-width: 100%;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  .cal-day.under { border-color: #D8A857; }
   .cal-day.under .d-cal { color: #7FB88A; }
+  .cal-day.over { border-color: #D8A857; }
   .cal-day.over .d-cal { color: #D9342B; }
   .cal-day.today-cell { border-color: #D8A857; border-width: 1.5px; }
   .cal-legend {
