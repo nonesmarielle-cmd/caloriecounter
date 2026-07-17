@@ -129,8 +129,8 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    background: #1C1B17;
-    border: 1px solid #26251F;
+    background: #D64E27;
+    border: 1px solid #963717;
     border-radius: 12px;
     padding: 10px;
   }
@@ -145,29 +145,31 @@
   .entry-name {
     font-size: 14px;
     font-weight: 500;
-    color: #EFEDE4;
+    color: #131311;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .entry-portion {
     font-size: 12px;
-    color: #8C897C;
+    color: #131311;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     margin-top: 2px;
   }
   .entry-cals {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: #D8A857;
     flex-shrink: 0;
   }
   .entry-del {
     background: none;
     border: none;
-    color: #4A493F;
+    color: #131311;
     padding: 4px;
     cursor: pointer;
     flex-shrink: 0;
@@ -239,8 +241,8 @@
     cursor: pointer;
   }
   .tab-btn.active {
-    border-color: #D8A857;
-    color: #D8A857;
+    border-color: #D64E27;
+    color: #D64E27;
   }
   .sheet label {
     font-size: 12px;
@@ -277,6 +279,12 @@
   }
   .page-nav .tab-btn {
     padding: 10px 6px;
+    background: #D64E27;
+    border-color: #963717;
+    color: #131311;
+  }
+  .page-nav .tab-btn.active {
+    color: #131311;
   }
   .cal-header {
     display: flex;
@@ -385,6 +393,10 @@
     border-radius: 10px;
     padding: 12px 14px;
   }
+  .sheet input[type=number]::placeholder { color: #EFEDE4; opacity: 1; }
+  .sheet input[type=number]::-webkit-input-placeholder { color: #EFEDE4; opacity: 1; }
+  .sheet input[type=number]::-moz-placeholder { color: #EFEDE4; opacity: 1; }
+  .sheet input[type=number]:-ms-input-placeholder { color: #EFEDE4; opacity: 1; }
   .sheet-row { display: flex; gap: 10px; margin-top: 16px; }
   .btn {
     flex: 1;
@@ -395,7 +407,7 @@
     border: none;
     cursor: pointer;
   }
-  .btn-primary { background: #D8A857; color: #131311; }
+  .btn-primary { background: #D64E27; color: #131311; }
   .btn-secondary { background: transparent; color: #8C897C; border: 1px solid #33322A; }
   .loading-wrap {
     display: flex;
@@ -1292,7 +1304,7 @@ function renderActivitySheet() {
     h += '<label>YouTube workout link</label>';
     h += '<input type="text" id="ytUrlInput" placeholder="https://youtube.com/watch?v=..." value="' + escapeHtml(state.ytUrlDraft) + '">';
     h += '<label>Minutes actually done (optional)</label>';
-    h += '<input type="number" id="ytMinutesInput" placeholder="leave blank to use full video" value="' + escapeHtml(state.ytMinutesDraft) + '" inputmode="numeric">';
+    h += '<input type="number" id="ytMinutesInput" placeholder="0" value="' + escapeHtml(state.ytMinutesDraft) + '" inputmode="numeric">';
     h += '<div class="hint">Looks up the video to identify the workout and estimates calories burned using your body weight.</div>';
     h += '<div class="sheet-row">';
     h += '<button class="btn btn-secondary" onclick="closeSheet()">Cancel</button>';
