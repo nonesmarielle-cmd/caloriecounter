@@ -193,8 +193,8 @@
   .fab {
     width: 58px; height: 58px;
     border-radius: 50%;
-    background: #D8A857;
-    border: none;
+    background: #D64E27;
+    border: 1.5px solid #963717;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -205,8 +205,8 @@
   .fab svg { width: 24px; height: 24px; color: #131311; }
   .fab:active { transform: scale(0.95); }
   .fab-secondary {
-    background: #D8A857;
-    border: none;
+    background: #D64E27;
+    border: 1.5px solid #963717;
     width: 58px; height: 58px;
   }
   .fab-secondary svg { width: 23px; height: 23px; color: #131311; }
@@ -380,7 +380,7 @@
     background: #131311;
     border: 1px solid #33322A;
     color: #EFEDE4;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'PP Mori Black', -apple-system, sans-serif;
     font-size: 20px;
     border-radius: 10px;
     padding: 12px 14px;
@@ -1173,13 +1173,6 @@ function renderProfilePicker() {
   let h = '<div class="profile-page">';
   h += '<div class="profile-logo-wrap"><img class="profile-logo" src="' + LOGO_DATA_URI + '" alt="The Burn Book"></div>';
   h += '<div class="profile-sub">What\'s your name?</div>';
-  if (state.profilesList.length > 0) {
-    h += '<div class="profile-list">';
-    state.profilesList.forEach(p => {
-      h += '<button class="profile-btn" onclick="selectProfile(\'' + p.slug + '\')">' + escapeHtml(p.name) + '</button>';
-    });
-    h += '</div>';
-  }
   if (state.profileError) {
     h += '<div class="err">' + escapeHtml(state.profileError) + '</div>';
   }
