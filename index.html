@@ -355,10 +355,12 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .cal-day.under { border-color: #D8A857; }
-  .cal-day.under .d-cal { color: #7FB88A; }
-  .cal-day.over { border-color: #D8A857; }
-  .cal-day.over .d-cal { color: #D9342B; }
+  .cal-day.under { background: #4CAF6B; border-color: #131311; }
+  .cal-day.under .d-num { color: #FFFFFF; }
+  .cal-day.under .d-cal { color: #FFFFFF; }
+  .cal-day.over { background: #D9342B; border-color: #131311; }
+  .cal-day.over .d-num { color: #FFFFFF; }
+  .cal-day.over .d-cal { color: #FFFFFF; }
   .cal-day.today-cell { border-color: #D8A857; border-width: 1.5px; }
   .cal-legend {
     display: flex;
@@ -623,7 +625,13 @@ const state = {
   dayActivities: [],
   daySteps: 0,
   dayLoading: false,
-  pendingWorkout: null
+  pendingWorkout: null,
+  editingEntry: null,
+  editingSource: null,
+  editingActivity: null,
+  editingActivitySource: null,
+  editingStepsSource: null,
+  editingStepsValue: 0
 };
 
 const MET_TABLE = {
@@ -885,7 +893,7 @@ function render() {
       group.slice().reverse().forEach(e => {
         html += '<div class="entry">';
         html += e.thumb ? ('<img src="' + e.thumb + '">') : ('<img src="' + RICE_EMOJI_URI + '" alt="described meal" style="width:48px;height:48px;border-radius:8px;object-fit:cover;">');
-        html += '<div class="entry-info"><div class="entry-name">' + escapeHtml(e.name) + '</div><div class="entry-portion">' + escapeHtml(e.portion) + '</div></div>';
+        html += '<div class="entry-info" onclick="openEditEntry(\'' + e.id + '\', \'today\')" style="cursor:pointer;"><div class="entry-name">' + escapeHtml(e.name) + '</div><div class="entry-portion">' + escapeHtml(e.portion) + '</div></div>';
         html += '<div class="entry-cals">' + e.calories + '</div>';
         html += '<button class="entry-del" onclick="deleteEntry(\'' + e.id + '\')">' + icon('trash') + '</button>';
         html += '</div>';
@@ -900,7 +908,7 @@ function render() {
     if (state.steps > 0) {
       html += '<div class="entry">';
       html += '<img class="activity-emoji" src="' + FIRE_EMOJI_URI + '" alt="fire">';
-      html += '<div class="entry-info"><div class="entry-name">' + state.steps.toLocaleString() + ' steps</div><div class="entry-portion">walking, estimated</div></div>';
+      html += '<div class="entry-info" onclick="openEditSteps(\'today\')" style="cursor:pointer;"><div class="entry-name">' + state.steps.toLocaleString() + ' steps</div><div class="entry-portion">walking, estimated</div></div>';
       html += '<div class="entry-cals burn">+' + stepCals + '</div>';
       html += '<button class="entry-del" onclick="clearSteps()">' + icon('trash') + '</button>';
       html += '</div>';
@@ -908,7 +916,7 @@ function render() {
     state.activities.slice().reverse().forEach(a => {
       html += '<div class="entry">';
       html += '<img class="activity-emoji" src="' + FIRE_EMOJI_URI + '" alt="fire">';
-      html += '<div class="entry-info"><div class="entry-name">' + escapeHtml(a.name) + '</div><div class="entry-portion">' + escapeHtml(a.detail) + '</div></div>';
+      html += '<div class="entry-info" onclick="openEditActivity(\'' + a.id + '\', \'today\')" style="cursor:pointer;"><div class="entry-name">' + escapeHtml(a.name) + '</div><div class="entry-portion">' + escapeHtml(a.detail) + '</div></div>';
       html += '<div class="entry-cals burn">+' + a.calories + '</div>';
       html += '<button class="entry-del" onclick="deleteActivity(\'' + a.id + '\')">' + icon('trash') + '</button>';
       html += '</div>';
@@ -938,6 +946,12 @@ function render() {
     html += renderDayDetailSheet();
   } else if (state.view === 'workoutResult') {
     html += renderWorkoutResultSheet();
+  } else if (state.view === 'editEntry') {
+    html += renderEditEntrySheet();
+  } else if (state.view === 'editActivity') {
+    html += renderEditActivitySheet();
+  } else if (state.view === 'editSteps') {
+    html += renderEditStepsSheet();
   }
 
   document.getElementById('app').innerHTML = html;
@@ -1108,7 +1122,7 @@ function renderDayDetailSheet() {
       state.dayEntries.forEach(e => {
         h += '<div class="entry">';
         h += e.thumb ? ('<img src="' + e.thumb + '">') : ('<img src="' + RICE_EMOJI_URI + '" alt="described meal" style="width:48px;height:48px;border-radius:8px;object-fit:cover;">');
-        h += '<div class="entry-info"><div class="entry-name">' + escapeHtml(e.name) + '</div><div class="entry-portion">' + escapeHtml(e.portion) + '</div></div>';
+        h += '<div class="entry-info" onclick="openEditEntry(\'' + e.id + '\', \'day\')" style="cursor:pointer;"><div class="entry-name">' + escapeHtml(e.name) + '</div><div class="entry-portion">' + escapeHtml(e.portion) + '</div></div>';
         h += '<div class="entry-cals">' + e.calories + '</div>';
         h += '<button class="entry-del" onclick="deleteDayEntry(\'' + e.id + '\')">' + icon('trash') + '</button>';
         h += '</div>';
@@ -1121,7 +1135,7 @@ function renderDayDetailSheet() {
       if (state.daySteps > 0) {
         h += '<div class="entry">';
         h += '<img class="activity-emoji" src="' + FIRE_EMOJI_URI + '" alt="fire">';
-        h += '<div class="entry-info"><div class="entry-name">' + state.daySteps.toLocaleString() + ' steps</div><div class="entry-portion">walking, estimated</div></div>';
+        h += '<div class="entry-info" onclick="openEditSteps(\'day\')" style="cursor:pointer;"><div class="entry-name">' + state.daySteps.toLocaleString() + ' steps</div><div class="entry-portion">walking, estimated</div></div>';
         h += '<div class="entry-cals burn">+' + stepCals + '</div>';
         h += '<button class="entry-del" onclick="clearDaySteps()">' + icon('trash') + '</button>';
         h += '</div>';
@@ -1129,7 +1143,7 @@ function renderDayDetailSheet() {
       state.dayActivities.forEach(a => {
         h += '<div class="entry">';
         h += '<img class="activity-emoji" src="' + FIRE_EMOJI_URI + '" alt="fire">';
-        h += '<div class="entry-info"><div class="entry-name">' + escapeHtml(a.name) + '</div><div class="entry-portion">' + escapeHtml(a.detail) + '</div></div>';
+        h += '<div class="entry-info" onclick="openEditActivity(\'' + a.id + '\', \'day\')" style="cursor:pointer;"><div class="entry-name">' + escapeHtml(a.name) + '</div><div class="entry-portion">' + escapeHtml(a.detail) + '</div></div>';
         h += '<div class="entry-cals burn">+' + a.calories + '</div>';
         h += '<button class="entry-del" onclick="deleteDayActivity(\'' + a.id + '\')">' + icon('trash') + '</button>';
         h += '</div>';
@@ -1511,6 +1525,201 @@ async function refineWorkoutWithDetails() {
   await analyzeYoutubeWorkout(state.ytUrlDraft, state.ytMinutesDraft, note);
 }
 
+function openEditEntry(id, source) {
+  const list = source === 'day' ? state.dayEntries : state.entries;
+  const entry = list.find(e => e.id === id);
+  if (!entry) return;
+  state.editingEntry = Object.assign({}, entry);
+  state.editingSource = source;
+  state.view = 'editEntry';
+  render();
+}
+
+function renderEditEntrySheet() {
+  const e = state.editingEntry;
+  let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
+  h += '<div class="sheet">';
+  if (!e) {
+    h += '<div class="err">Something went wrong loading that entry.</div>';
+    h += '<div class="sheet-row"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Close</button></div>';
+    h += '</div></div>';
+    return h;
+  }
+  h += '<div class="sheet-title">Edit entry</div>';
+  if (e.thumb) {
+    h += '<div class="analyzed-preview"><img src="' + e.thumb + '"><div><div class="analyzed-portion">Photo logged</div></div></div>';
+  }
+  h += '<label>Food name</label>';
+  h += '<input type="text" id="editEntryNameInput" value="' + escapeHtml(e.name) + '">';
+  h += '<label>Portion / details</label>';
+  h += '<input type="text" id="editEntryPortionInput" value="' + escapeHtml(e.portion) + '">';
+  h += '<label>Calories</label>';
+  h += '<input type="number" id="editEntryCaloriesInput" value="' + e.calories + '" inputmode="numeric">';
+  h += '<label>Meal</label>';
+  h += '<select id="editEntryMealInput">';
+  [['breakfast','Breakfast'], ['lunch','Lunch'], ['dinner','Dinner'], ['snack','Snack']].forEach(m => {
+    h += '<option value="' + m[0] + '"' + (m[0] === (e.mealType || 'snack') ? ' selected' : '') + '>' + m[1] + '</option>';
+  });
+  h += '</select>';
+  h += '<div class="sheet-row">';
+  h += '<button class="btn btn-secondary" onclick="deleteEditingEntry()">Delete</button>';
+  h += '<button class="btn btn-primary" onclick="saveEditedEntry()">Save</button>';
+  h += '</div>';
+  h += '<div class="sheet-row" style="margin-top:8px;"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Cancel</button></div>';
+  h += '</div></div>';
+  return h;
+}
+
+function saveEditedEntry() {
+  const e = state.editingEntry;
+  if (!e) return;
+  const name = document.getElementById('editEntryNameInput').value.trim();
+  const portion = document.getElementById('editEntryPortionInput').value.trim();
+  const calories = parseInt(document.getElementById('editEntryCaloriesInput').value, 10);
+  const mealType = document.getElementById('editEntryMealInput').value;
+  if (!name || isNaN(calories)) return;
+
+  const list = state.editingSource === 'day' ? state.dayEntries : state.entries;
+  const idx = list.findIndex(x => x.id === e.id);
+  if (idx === -1) return;
+  list[idx] = Object.assign({}, list[idx], { name, portion, calories, mealType });
+
+  if (state.editingSource === 'day') {
+    saveDayEntries();
+    updateCalendarDataForSelectedDate();
+    syncTodayStateIfSelectedIsToday();
+  } else {
+    saveEntries();
+  }
+  state.editingEntry = null;
+  state.editingSource = null;
+  closeSheet();
+}
+
+function deleteEditingEntry() {
+  const e = state.editingEntry;
+  if (!e) return;
+  if (state.editingSource === 'day') {
+    deleteDayEntry(e.id);
+  } else {
+    deleteEntry(e.id);
+  }
+  state.editingEntry = null;
+  state.editingSource = null;
+  closeSheet();
+}
+
+function openEditActivity(id, source) {
+  const list = source === 'day' ? state.dayActivities : state.activities;
+  const activity = list.find(a => a.id === id);
+  if (!activity) return;
+  state.editingActivity = Object.assign({}, activity);
+  state.editingActivitySource = source;
+  state.view = 'editActivity';
+  render();
+}
+
+function renderEditActivitySheet() {
+  const a = state.editingActivity;
+  let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
+  h += '<div class="sheet">';
+  if (!a) {
+    h += '<div class="err">Something went wrong loading that entry.</div>';
+    h += '<div class="sheet-row"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Close</button></div>';
+    h += '</div></div>';
+    return h;
+  }
+  h += '<div class="sheet-title">Edit activity</div>';
+  h += '<label>Name</label>';
+  h += '<input type="text" id="editActivityNameInput" value="' + escapeHtml(a.name) + '">';
+  h += '<label>Detail</label>';
+  h += '<input type="text" id="editActivityDetailInput" value="' + escapeHtml(a.detail) + '">';
+  h += '<label>Calories burned</label>';
+  h += '<input type="number" id="editActivityCaloriesInput" value="' + a.calories + '" inputmode="numeric">';
+  h += '<div class="sheet-row">';
+  h += '<button class="btn btn-secondary" onclick="deleteEditingActivity()">Delete</button>';
+  h += '<button class="btn btn-primary" onclick="saveEditedActivity()">Save</button>';
+  h += '</div>';
+  h += '<div class="sheet-row" style="margin-top:8px;"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Cancel</button></div>';
+  h += '</div></div>';
+  return h;
+}
+
+function saveEditedActivity() {
+  const a = state.editingActivity;
+  if (!a) return;
+  const name = document.getElementById('editActivityNameInput').value.trim();
+  const detail = document.getElementById('editActivityDetailInput').value.trim();
+  const calories = parseInt(document.getElementById('editActivityCaloriesInput').value, 10);
+  if (!name || isNaN(calories)) return;
+
+  const list = state.editingActivitySource === 'day' ? state.dayActivities : state.activities;
+  const idx = list.findIndex(x => x.id === a.id);
+  if (idx === -1) return;
+  list[idx] = Object.assign({}, list[idx], { name, detail, calories });
+
+  if (state.editingActivitySource === 'day') {
+    saveDayActivity();
+    updateCalendarDataForSelectedDate();
+    syncTodayStateIfSelectedIsToday();
+  } else {
+    saveActivity();
+  }
+  state.editingActivity = null;
+  state.editingActivitySource = null;
+  closeSheet();
+}
+
+function deleteEditingActivity() {
+  const a = state.editingActivity;
+  if (!a) return;
+  if (state.editingActivitySource === 'day') {
+    deleteDayActivity(a.id);
+  } else {
+    deleteActivity(a.id);
+  }
+  state.editingActivity = null;
+  state.editingActivitySource = null;
+  closeSheet();
+}
+
+function openEditSteps(source) {
+  state.editingStepsSource = source;
+  state.editingStepsValue = source === 'day' ? state.daySteps : state.steps;
+  state.view = 'editSteps';
+  render();
+}
+
+function renderEditStepsSheet() {
+  let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
+  h += '<div class="sheet">';
+  h += '<div class="sheet-title">Edit steps</div>';
+  h += '<label>Total steps</label>';
+  h += '<input type="number" id="editStepsInput" value="' + state.editingStepsValue + '" inputmode="numeric">';
+  h += '<div class="sheet-row">';
+  h += '<button class="btn btn-secondary" onclick="closeSheet()">Cancel</button>';
+  h += '<button class="btn btn-primary" onclick="saveEditedSteps()">Save</button>';
+  h += '</div>';
+  h += '</div></div>';
+  return h;
+}
+
+function saveEditedSteps() {
+  const val = parseInt(document.getElementById('editStepsInput').value, 10);
+  const steps = (val && val > 0) ? val : 0;
+  if (state.editingStepsSource === 'day') {
+    state.daySteps = steps;
+    saveDayActivity();
+    updateCalendarDataForSelectedDate();
+    syncTodayStateIfSelectedIsToday();
+  } else {
+    state.steps = steps;
+    saveActivity();
+  }
+  state.editingStepsSource = null;
+  closeSheet();
+}
+
 function confirmAddWorkout() {
   const w = state.pendingWorkout;
   if (!w) return;
@@ -1540,6 +1749,11 @@ function closeSheet() {
   state.pendingResult = null;
   state.pendingImage = null;
   state.pendingWorkout = null;
+  state.editingEntry = null;
+  state.editingSource = null;
+  state.editingActivity = null;
+  state.editingActivitySource = null;
+  state.editingStepsSource = null;
   state.activityError = null;
   state.activityLoading = false;
   render();
@@ -1844,6 +2058,14 @@ window.deleteActivity = deleteActivity;
 window.analyzeYoutubeWorkout = analyzeYoutubeWorkout;
 window.confirmAddWorkout = confirmAddWorkout;
 window.refineWorkoutWithDetails = refineWorkoutWithDetails;
+window.openEditEntry = openEditEntry;
+window.saveEditedEntry = saveEditedEntry;
+window.deleteEditingEntry = deleteEditingEntry;
+window.openEditActivity = openEditActivity;
+window.saveEditedActivity = saveEditedActivity;
+window.deleteEditingActivity = deleteEditingActivity;
+window.openEditSteps = openEditSteps;
+window.saveEditedSteps = saveEditedSteps;
 window.switchPage = switchPage;
 window.prevMonth = prevMonth;
 window.nextMonth = nextMonth;
