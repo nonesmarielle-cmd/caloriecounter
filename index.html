@@ -1293,7 +1293,7 @@ function renderResultSheet() {
 function renderActivitySheet() {
   let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
   h += '<div class="sheet">';
-  h += '<div class="sheet-title">Log activity</div>';
+  h += '<div class="sheet-title" style="color:#FFFFFF;font-family:\'HeartBreaker Caps\', -apple-system, sans-serif;font-weight:400;font-size:24px;">have you moved?</div>';
   h += '<div class="tabs">';
   h += '<button class="tab-btn' + (state.activityTab === 'steps' ? ' active' : '') + '" onclick="setActivityTab(\'steps\')">Steps</button>';
   h += '<button class="tab-btn' + (state.activityTab === 'manual' ? ' active' : '') + '" onclick="setActivityTab(\'manual\')">Workout</button>';
@@ -1931,7 +1931,7 @@ function openDescribe() {
 function renderDescribeSheet() {
   let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
   h += '<div class="sheet">';
-  h += '<div class="sheet-title">Describe what you ate</div>';
+  h += '<div class="sheet-title" style="color:#FFFFFF;font-family:\'HeartBreaker Caps\', -apple-system, sans-serif;font-weight:400;font-size:24px;">describe your meal</div>';
   if (state.error) {
     h += '<div class="err">' + escapeHtml(state.error) + '</div>';
   }
