@@ -631,7 +631,8 @@ const state = {
   editingActivity: null,
   editingActivitySource: null,
   editingStepsSource: null,
-  editingStepsValue: 0
+  editingStepsValue: 0,
+  addEntryContext: null
 };
 
 const MET_TABLE = {
@@ -1152,7 +1153,8 @@ function renderDayDetailSheet() {
     }
   }
 
-  h += '<div class="sheet-row" style="margin-top:16px;"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Close</button></div>';
+  h += '<div class="sheet-row" style="margin-top:16px;"><button class="btn btn-secondary" style="flex:1;" onclick="openAddFoodForDay()">+ Add food to this day</button></div>';
+  h += '<div class="sheet-row" style="margin-top:8px;"><button class="btn btn-secondary" style="flex:1;" onclick="closeSheet()">Close</button></div>';
   h += '</div></div>';
   return h;
 }
@@ -1256,7 +1258,7 @@ function renderResultSheet() {
   h += '<div class="sheet">';
   if (state.error) {
     h += '<div class="err">' + escapeHtml(state.error) + '</div>';
-    h += '<div class="sheet-row"><button class="btn btn-secondary" onclick="closeSheet()">Close</button><button class="btn btn-primary" onclick="retryAnalysis()">Try again</button></div>';
+    h += '<div class="sheet-row"><button class="btn btn-secondary" onclick="returnAfterAdd()">Close</button><button class="btn btn-primary" onclick="retryAnalysis()">Try again</button></div>';
   } else if (r) {
     h += '<div class="analyzed-preview">';
     h += state.pendingImage ? ('<img src="' + state.pendingImage + '">') : ('<img src="' + RICE_EMOJI_URI + '" alt="described meal" style="width:64px;height:64px;border-radius:10px;object-fit:cover;">');
@@ -1282,7 +1284,7 @@ function renderResultSheet() {
     });
     h += '</select>';
     h += '<div class="sheet-row">';
-    h += '<button class="btn btn-secondary" onclick="closeSheet()">Discard</button>';
+    h += '<button class="btn btn-secondary" onclick="returnAfterAdd()">Discard</button>';
     h += '<button class="btn btn-primary" onclick="confirmAddEntry()">Add to log</button>';
     h += '</div>';
   }
@@ -1754,6 +1756,7 @@ function closeSheet() {
   state.editingActivity = null;
   state.editingActivitySource = null;
   state.editingStepsSource = null;
+  state.addEntryContext = null;
   state.activityError = null;
   state.activityLoading = false;
   render();
@@ -1924,7 +1927,30 @@ async function analyzeImage(dataUrl, note) {
 
 function openDescribe() {
   state.error = null;
+  state.addEntryContext = null;
   state.view = 'describe';
+  render();
+}
+
+function openAddFoodForDay() {
+  state.error = null;
+  state.addEntryContext = state.selectedDate;
+  state.view = 'describe';
+  render();
+}
+
+function returnAfterAdd() {
+  state.error = null;
+  state.pendingResult = null;
+  state.pendingImage = null;
+  state.pendingWorkout = null;
+  state.activityError = null;
+  state.activityLoading = false;
+  if (state.addEntryContext) {
+    state.view = 'dayDetail';
+  } else {
+    state.view = null;
+  }
   render();
 }
 
@@ -1932,6 +1958,11 @@ function renderDescribeSheet() {
   let h = '<div class="overlay" onclick="closeSheetIfBackdrop(event)">';
   h += '<div class="sheet">';
   h += '<div class="sheet-title" style="color:#FFFFFF;font-family:\'HeartBreaker Caps\', -apple-system, sans-serif;font-weight:400;font-size:24px;">describe your meal</div>';
+  if (state.addEntryContext) {
+    const dateObj = new Date(state.addEntryContext + 'T00:00:00');
+    const label = dateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+    h += '<div class="hint" style="margin-bottom:10px;">Adding this to ' + label + '.</div>';
+  }
   if (state.error) {
     h += '<div class="err">' + escapeHtml(state.error) + '</div>';
   }
@@ -1939,7 +1970,7 @@ function renderDescribeSheet() {
   h += '<textarea id="mealDescriptionInput" placeholder="e.g. 1 cup rice, 2 pieces fried chicken thigh, small side of atchara"></textarea>';
   h += '<div class="hint">Include portions if you know them (cups, pieces, grams) \u2014 the more specific, the more accurate the estimate.</div>';
   h += '<div class="sheet-row">';
-  h += '<button class="btn btn-secondary" onclick="closeSheet()">Cancel</button>';
+  h += '<button class="btn btn-secondary" onclick="returnAfterAdd()">Cancel</button>';
   h += '<button class="btn btn-primary" onclick="submitDescription()"' + (state.loading ? ' disabled' : '') + '>' + (state.loading ? 'Analyzing\u2026' : 'Analyze') + '</button>';
   h += '</div>';
   h += '</div></div>';
@@ -2026,7 +2057,7 @@ function confirmAddEntry() {
   const portionNote = percent !== 100
     ? r.portion_description + ' \u2014 ' + percent + '% eaten'
     : r.portion_description;
-  state.entries.push({
+  const newEntry = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: finalName,
     portion: portionNote,
@@ -2034,9 +2065,18 @@ function confirmAddEntry() {
     mealType: mealType,
     thumb: state.pendingImage,
     time: Date.now()
-  });
-  saveEntries();
-  closeSheet();
+  };
+
+  if (state.addEntryContext) {
+    state.dayEntries.push(newEntry);
+    saveDayEntries();
+    updateCalendarDataForSelectedDate();
+    syncTodayStateIfSelectedIsToday();
+  } else {
+    state.entries.push(newEntry);
+    saveEntries();
+  }
+  returnAfterAdd();
 }
 
 window.openSettings = openSettings;
@@ -2073,6 +2113,8 @@ window.selectProfile = selectProfile;
 window.createProfile = createProfile;
 window.switchProfile = switchProfile;
 window.openDescribe = openDescribe;
+window.openAddFoodForDay = openAddFoodForDay;
+window.returnAfterAdd = returnAfterAdd;
 window.submitDescription = submitDescription;
 window.openDayDetail = openDayDetail;
 window.deleteDayEntry = deleteDayEntry;
